@@ -1,0 +1,1 @@
+cmd_/home/ypkoo/ee516/proj2/proc_sample.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/ypkoo/ee516/proj2/proc_sample.ko /home/ypkoo/ee516/proj2/proc_sample.o /home/ypkoo/ee516/proj2/proc_sample.mod.o

@@ -46,11 +46,11 @@ enum sort {
 int sort = PID; // set default value as PID
 
 /* An auxiliary function for selection sort. return max or min index according to sorting criterion */
-int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num, int sort_criterion) {
+int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num) {
 	int i = start_idx;
 	int max_idx = i + 1;
 
-	switch (sort_criterion) {
+	switch (sort) {
 		case PID:
 			for (i=start_idx; i<entry_num; i++) {
 				if (procmon_entry[i].pid < procmon_entry[max_idx].pid)
@@ -87,12 +87,12 @@ int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num, int sort_
 procmon_entry_t *procmon_entry: array of procmon_entry
 int entry_num: number of procmon_entrys
 int sort_criterion: sorting criterion */
-void selection_sort(procmon_entry_t *procmon_entry, int entry_num, int sort_criterion) {
+void selection_sort(procmon_entry_t *procmon_entry, int entry_num) {
 	int i, j;
 	procmon_entry_t temp_entry;
 
 	for (i=0; i<entry_num; i++) {
-		j = max_(procmon_entry, i, entry_num, sort_criterion);
+		j = max_(procmon_entry, i, entry_num);
 		temp_entry = procmon_entry[j];
 		procmon_entry[j] = procmon_entry[i];
 		procmon_entry[i] = temp_entry;

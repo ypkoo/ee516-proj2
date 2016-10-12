@@ -21,8 +21,19 @@
 #define FILE_NAME "procmon"
 #define FILE_NAME_SORTING "procmon_sorting" // procmon_sorting name
 #define BUF_SIZE 512
+#define MAX_PNAME 20 // max length of process name
 
 char mybuf[BUF_SIZE];
+
+/* structure of process info entry for sorting */
+typedef struct {
+	char pname[MAX_PNAME];
+	int pid;
+	unsigned long vm;
+	long rss;
+	unsigned long long r;
+	unsigned long long w;
+} procmon_entry_t;
 
 /* for sorting */
 enum sort {
@@ -33,6 +44,60 @@ enum sort {
 };
 
 int sort = PID; // set default value as PID
+
+/* An auxiliary function for selection sort. return max or min index according to sorting criterion */
+int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num, int sort_criterion) {
+	int i = start_idx;
+	int max_idx = i + 1;
+
+	switch (sort_criterion) {
+		case PID:
+			for (i=start_idx; i<entry_num; i++) {
+				if (procmon_entry[i].pid < procmon_entry[max_idx].pid)
+					max_idx = i;
+			}
+		case VIRT:
+			for (i=start_idx; i<entry_num; i++) {
+				if (procmon_entry[i].vm < procmon_entry[max_idx].vm)
+					max_idx = i;
+			}
+		case RSS:
+			for (i=start_idx; i<entry_num; i++) {
+				if (procmon_entry[i].rss < procmon_entry[max_idx].rss)
+					max_idx = i;
+			}
+		case IO:
+			for (i=start_idx; i<entry_num; i++) {
+				if (procmon_entry[i].r + procmon_entry[i].w < procmon_entry[max_idx].r + procmon_entry[max_idx].w)
+					max_idx = i;
+			}
+		default:
+			for (i=start_idx; i<entry_num; i++) {
+				if (procmon_entry[i].pid < procmon_entry[max_idx].pid)
+					max_idx = i;
+			}
+	}
+
+	return max_idx;
+}
+
+
+/** sorting function
+*** input
+procmon_entry_t *procmon_entry: array of procmon_entry
+int entry_num: number of procmon_entrys
+int sort_criterion: sorting criterion */
+void selection_sort(procmon_entry_t *procmon_entry, int entry_num, int sort_criterion) {
+	int i, j;
+	procmon_entry_t temp_entry;
+
+	for (i=0; i<entry_num; i++) {
+		j = max_(procmon_entry, i, entry_num, sort_criterion);
+		temp_entry = procmon_entry[j];
+		procmon_entry[j] = procmon_entry[i];
+		procmon_entry[i] = temp_entry;
+	}
+}
 
 unsigned long virtual_memory(struct task_struct *task) {
 	unsigned long vm = 0;

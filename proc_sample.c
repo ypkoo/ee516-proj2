@@ -18,10 +18,14 @@
 /* for string comparison */
 #include <linux/string.h>
 
+// #include <stdlib.h>
+
+
 #define FILE_NAME "procmon"
 #define FILE_NAME_SORTING "procmon_sorting" // procmon_sorting name
 #define BUF_SIZE 512
 #define MAX_PNAME 20 // max length of process name
+#define MAX_PROC_NUM 200
 
 char mybuf[BUF_SIZE];
 
@@ -56,28 +60,32 @@ int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num) {
 				if (procmon_entry[i].pid < procmon_entry[max_idx].pid)
 					max_idx = i;
 			}
+			break;
 		case VIRT:
 			for (i=start_idx; i<entry_num; i++) {
-				if (procmon_entry[i].vm < procmon_entry[max_idx].vm)
+				if (procmon_entry[i].vm > procmon_entry[max_idx].vm)
 					max_idx = i;
 			}
+			break;
 		case RSS:
 			for (i=start_idx; i<entry_num; i++) {
-				if (procmon_entry[i].rss < procmon_entry[max_idx].rss)
+				if (procmon_entry[i].rss > procmon_entry[max_idx].rss)
 					max_idx = i;
 			}
+			break;
 		case IO:
 			for (i=start_idx; i<entry_num; i++) {
-				if (procmon_entry[i].r + procmon_entry[i].w < procmon_entry[max_idx].r + procmon_entry[max_idx].w)
+				if (procmon_entry[i].r + procmon_entry[i].w > procmon_entry[max_idx].r + procmon_entry[max_idx].w)
 					max_idx = i;
 			}
+			break;
 		default:
 			for (i=start_idx; i<entry_num; i++) {
-				if (procmon_entry[i].pid < procmon_entry[max_idx].pid)
+				if (procmon_entry[i].pid > procmon_entry[max_idx].pid)
 					max_idx = i;
 			}
+			break;
 	}
-
 	return max_idx;
 }
 
@@ -159,18 +167,40 @@ static int procmon_proc_show(struct seq_file *m, void *v)
 	unsigned long vm;
 	long rss;
 	unsigned long long r, w;
+
+	// procmon_entry_t *procmon_entrys = (procmon_entry_t *) malloc(sizeof(procmon_entry_t));
+	procmon_entry_t procmon_entrys[MAX_PROC_NUM];
+	int entry_num = -1;
+	int i;
+
 	seq_printf(m, "======================== Process Monitoring Manager for EE516 by YPKOO ======================== \n");
 	seq_printf(m, "%-6s\t%-20s%8s\t%8s\t%8s\t%8s\t%8s\n", "PID", "ProcessName", "VIRT(KB)", "RSS Mem(KB)", "DiskRead(KB)", "DiskWrite(KB)", "Total I/O(KB)");
 
 	for_each_process(task) {
+		entry_num++;
 
 		vm = virtual_memory(task);
 		rss = rs_size(task);
 		r = disk_read(task);
 		w = disk_write(task);
 
-		seq_printf(m, "%-6d\t%-20s%8lu\t%8ld\t%8llu\t%8llu\t%8llu\n", task->pid, task->comm, vm, rss, r, w, r+w);
+		procmon_entrys[entry_num].pid = task->pid;
+		strncpy(procmon_entrys[entry_num].pname, task->comm, strlen(task->comm) + 1);
+		procmon_entrys[entry_num].vm = vm;
+		procmon_entrys[entry_num].rss = rss;
+		procmon_entrys[entry_num].r = r;
+		procmon_entrys[entry_num].w = w;
+
+		// seq_printf(m, "%-6d\t%-20s%8lu\t%8ld\t%8llu\t%8llu\t%8llu\n", task->pid, task->comm, vm, rss, r, w, r+w);
 	}
+
+	selection_sort(procmon_entrys, entry_num);
+
+	for (i=0; i<entry_num; i++) {
+		seq_printf(m, "%-6d\t%-20s%8lu\t%8ld\t%8llu\t%8llu\t%8llu\n", procmon_entrys[i].pid, procmon_entrys[i].pname, procmon_entrys[i].vm, procmon_entrys[i].rss, procmon_entrys[i].r, procmon_entrys[i].w, procmon_entrys[i].r + procmon_entrys[i].w);
+	}
+
+	seq_printf(m, "entry number: %d\n", entry_num);
 	return 0;
 }
 

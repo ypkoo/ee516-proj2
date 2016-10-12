@@ -52,7 +52,7 @@ int sort = PID; // set default value as PID
 /* An auxiliary function for selection sort. return max or min index according to sorting criterion */
 int max_(procmon_entry_t *procmon_entry, int start_idx, int entry_num) {
 	int i = start_idx;
-	int max_idx = i + 1;
+	int max_idx = i;
 
 	switch (sort) {
 		case PID:
@@ -107,6 +107,7 @@ void selection_sort(procmon_entry_t *procmon_entry, int entry_num) {
 	}
 }
 
+/* count virtual memory size of a task */
 unsigned long virtual_memory(struct task_struct *task) {
 	unsigned long vm = 0;
 
@@ -142,7 +143,7 @@ unsigned long long disk_read(struct task_struct *task) {
 	while_each_thread(task, task_)
 		task_io_accounting_add(&task->ioac, &task_->ioac);
 
-	r = task->ioac.rchar;
+	r = task->ioac.read_bytes / 1024; // to convert KB unit
 
 	return r;
 }
@@ -155,7 +156,7 @@ unsigned long long disk_write(struct task_struct *task) {
 	while_each_thread(task, task_)
 		task_io_accounting_add(&task->ioac, &task_->ioac);
 
-	w = task->ioac.wchar;
+	w = task->ioac.write_bytes / 1024; // to convert KB unit
 
 	return w;
 }
@@ -168,42 +169,53 @@ static int procmon_proc_show(struct seq_file *m, void *v)
 	long rss;
 	unsigned long long r, w;
 
-	// procmon_entry_t *procmon_entrys = (procmon_entry_t *) malloc(sizeof(procmon_entry_t));
-	procmon_entry_t procmon_entrys[MAX_PROC_NUM];
-	int entry_num = -1;
-	int i;
+	/* process information array for sorting */
+	procmon_entry_t *procmon_entrys = (procmon_entry_t*) kmalloc(sizeof(procmon_entry_t), ZONE_NORMAL);
+	int entry_num = -1; // this value stands for the number of process
+	int i; // for iteration
 
 	seq_printf(m, "======================== Process Monitoring Manager for EE516 by YPKOO ======================== \n");
 	seq_printf(m, "%-6s\t%-20s%8s\t%8s\t%8s\t%8s\t%8s\n", "PID", "ProcessName", "VIRT(KB)", "RSS Mem(KB)", "DiskRead(KB)", "DiskWrite(KB)", "Total I/O(KB)");
 
+	/* Store each process information into procmon_entrys array */
 	for_each_process(task) {
-		entry_num++;
+		entry_num++; // increments entry_num first. Since it was set as -1 in declaration, it becomes 0 in the first loop and ends with the exact process number - 1.
+		
+		/* Increase the size of procmon_entrys array according to current number of entry_num */
+		procmon_entrys = (procmon_entry_t*) krealloc(procmon_entrys, sizeof(procmon_entry_t) * (entry_num + 1), ZONE_NORMAL);
 
+		task_lock(task);
 		vm = virtual_memory(task);
 		rss = rs_size(task);
 		r = disk_read(task);
 		w = disk_write(task);
+		task_unlock(task);
 
+		/* Store each information into procmon_entrys array */
 		procmon_entrys[entry_num].pid = task->pid;
 		strncpy(procmon_entrys[entry_num].pname, task->comm, strlen(task->comm) + 1);
 		procmon_entrys[entry_num].vm = vm;
 		procmon_entrys[entry_num].rss = rss;
 		procmon_entrys[entry_num].r = r;
 		procmon_entrys[entry_num].w = w;
-
-		// seq_printf(m, "%-6d\t%-20s%8lu\t%8ld\t%8llu\t%8llu\t%8llu\n", task->pid, task->comm, vm, rss, r, w, r+w);
 	}
 
-	selection_sort(procmon_entrys, entry_num);
+	/* sort the procmon_entrys array according to sorting criterion 
+	   since the entry_num is the actual process number - 1, we should + 1*/
+	selection_sort(procmon_entrys, entry_num + 1);
 
+	/* print the result */
 	for (i=0; i<entry_num; i++) {
 		seq_printf(m, "%-6d\t%-20s%8lu\t%8ld\t%8llu\t%8llu\t%8llu\n", procmon_entrys[i].pid, procmon_entrys[i].pname, procmon_entrys[i].vm, procmon_entrys[i].rss, procmon_entrys[i].r, procmon_entrys[i].w, procmon_entrys[i].r + procmon_entrys[i].w);
 	}
 
-	seq_printf(m, "entry number: %d\n", entry_num);
+	/* free memory */
+	kfree(procmon_entrys);
+
 	return 0;
 }
 
+/* result for cat /proc/procmon_sorting. This shows the current sorting criterion. */
 static int procmon_sorting_proc_show(struct seq_file *m, void *v)
 {
 	switch(sort) {
@@ -223,6 +235,7 @@ static int procmon_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, procmon_proc_show, NULL);
 }
 
+/* procmon_sorting open function */
 static int procmon_sorting_proc_open(struct inode *inode, struct file *file)
 {
 	printk(KERN_INFO "proc sorting called open\n");
@@ -243,6 +256,7 @@ static ssize_t procmon_proc_write(struct file *file, const char __user *buf, siz
 	return (ssize_t)count;
 }
 
+/* procmon_sorting write function */
 static ssize_t procmon_sorting_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 {
 
@@ -256,6 +270,7 @@ static ssize_t procmon_sorting_proc_write(struct file *file, const char __user *
 		return -EFAULT;
 	}
 
+	/* set sort value according to write input. If input has wrong value, set the value as the default value, PID */
 	if (strncmp(buf, "pid", 3) == 0) {
 		sort = PID;
 	}
@@ -289,6 +304,7 @@ struct file_operations fops = {
 	.release = single_release,
 };
 
+/* file operations for procmon_sorting */
 struct file_operations fops_sorting = {
 	.owner = THIS_MODULE,
 	.open = procmon_sorting_proc_open,
@@ -303,6 +319,7 @@ static int __init init_procmon (void)
 {
 	
 	struct proc_dir_entry *procmon_proc;
+
 	/* proc_dir_entry for sorting */
 	struct proc_dir_entry *procmon_sorting;
 
